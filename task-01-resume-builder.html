@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Resume Builder · AI Classroom</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main class="container">
+  <div class="page-head"><span class="task-badge">Task 1</span><h1>AI Resume Builder</h1><p class="lede">Fill in your details and let AI write a polished, professional resume for you. Review the preview, then print it as a PDF.</p><div class="mode-note"></div></div>
+
+  <div class="two-col no-print">
+    <div class="panel">
+      <div class="form-group">
+        <label for="name">Full name</label>
+        <input type="text" id="name" placeholder="e.g. Anirudh Thakur">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" placeholder="you@example.com">
+        </div>
+        <div class="form-group">
+          <label for="contact">Phone</label>
+          <input type="text" id="contact" placeholder="+91 98765 43210">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="objective">Career objective</label>
+        <textarea id="objective" rows="3" placeholder="2–3 lines about who you are and what you're looking for"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="education">Education (one entry per line)</label>
+        <textarea id="education" rows="3" placeholder="B.Tech CSE, MM(DU) Mullana — 2027"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="skills">Skills (comma-separated)</label>
+        <input type="text" id="skills" placeholder="Python, HTML, Excel, Public Speaking">
+      </div>
+      <div class="form-group">
+        <label for="experience">Experience / Projects (one per line)</label>
+        <textarea id="experience" rows="3" placeholder="Built a portfolio website — 2025"></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="genBtn">✨ Generate Resume</button>
+        <button class="btn btn-ghost" id="sampleBtn">Fill sample data</button>
+      </div>
+    </div>
+    <div>
+      <div class="output" id="resumeOut" aria-live="polite">
+        <p style="color:var(--muted)">Your resume preview will appear here. Fill the form and hit <b>✨ Generate Resume</b>.</p>
+      </div>
+      <div class="btn-row no-print" style="margin-top:14px">
+        <button class="btn" id="copyBtn">📋 Copy</button>
+        <button class="btn" id="printBtn">🖨️ Download / Print PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <details class="help no-print">
+    <summary>How to use this task</summary>
+    <ol>
+      <li>Fill in your details (or use <b>Fill sample data</b> to try it out).</li>
+      <li>Click <b>✨ Generate Resume</b> to get an AI-written resume.</li>
+      <li>Use <b>🖨️ Download / Print PDF</b> and choose "Save as PDF" in the print dialog.</li>
+      <li>Connect an OpenAI key (🔑 AI Key) for even better, real AI writing.</li>
+    </ol>
+  </details>
+</main>
+<script src="../assets/js/common.js"></script>
+<script src="../assets/js/local-ai.js"></script>
+<script src="../assets/js/ai.js"></script>
+<script>
+initLayout(1);
+
+const $ = id => document.getElementById(id);
+const fields = ['name', 'email', 'contact', 'objective', 'education', 'skills', 'experience'];
+let lastMarkdown = '';
+
+$('sampleBtn').onclick = () => {
+  $('name').value = 'Anirudh Thakur';
+  $('email').value = 'anirudh@example.com';
+  $('contact').value = '+91 98765 43210';
+  $('objective').value = 'Motivated B.Tech CSE student (2027) learning Python and data analysis. Eager to apply classroom learning to real-world problems and grow as a data analyst.';
+  $('education').value = 'B.Tech Computer Science & Engineering, MM(DU) Mullana — 2027 (expected)\nClass XII, CBSE — 2023';
+  $('skills').value = 'Python, HTML, CSS, JavaScript, Excel, Git';
+  $('experience').value = 'Built a portfolio website with HTML, CSS and JS — 2025\nCompleted Python data-analysis exercises on CSV datasets — 2026';
+  toast('Sample data filled');
+};
+
+function setLoading(loading){
+  const b = $('genBtn');
+  b.disabled = loading;
+  b.textContent = loading ? 'Generating…' : '✨ Generate Resume';
+}
+
+$('genBtn').onclick = async () => {
+  const input = {};
+  fields.forEach(f => input[f] = $(f).value.trim());
+  if (!input.name && !input.email && !input.objective && !input.education && !input.skills && !input.experience){
+    toast('Please fill at least one field first (or use "Fill sample data")');
+    return;
+  }
+  setLoading(true);
+  try {
+    const md = await generateAI('resume', input);
+    lastMarkdown = md;
+    $('resumeOut').innerHTML = miniMd(md);
+  } catch (err){
+    toast('Could not generate resume: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+$('copyBtn').onclick = async () => {
+  if (!lastMarkdown){ toast('Generate a resume first'); return; }
+  try {
+    await navigator.clipboard.writeText(lastMarkdown);
+    toast('Resume copied to clipboard');
+  } catch (err){ toast('Copy failed: ' + err.message); }
+};
+
+$('printBtn').onclick = () => {
+  if (!lastMarkdown){ toast('Generate a resume first'); return; }
+  window.print();
+};
+</script>
+</body>
+</html>

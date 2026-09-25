@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Google Sheets as Backend · AI Classroom</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main class="container">
+  <div class="page-head"><span class="task-badge">Task 5</span><h1>Google Sheets as Backend</h1><p class="lede">A marksheet powered by a Google Sheet. Try it instantly in demo mode, or connect your own sheet as a live database via an Apps Script web app.</p><div class="mode-note"></div></div>
+
+  <div class="panel">
+    <div id="modeBanner" style="font-weight:700;margin-bottom:14px;"></div>
+
+    <div class="form-group">
+      <label for="scriptUrl">Google Apps Script Web App URL (live mode)</label>
+      <input type="url" id="scriptUrl" placeholder="https://script.google.com/macros/s/…/exec">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="connectBtn">🔗 Connect</button>
+      <button class="btn btn-ghost hidden" id="disconnectBtn">Disconnect</button>
+      <button class="btn" id="refreshBtn">↻ Refresh</button>
+      <button class="btn" id="insightBtn">🤖 AI Insight</button>
+    </div>
+
+    <div style="overflow-x:auto;">
+    <table class="data" id="marksTable">
+      <thead><tr><th>Name</th><th>Roll</th><th>Subject</th><th>Marks</th><th></th></tr></thead>
+      <tbody id="marksBody"><tr><td colspan="5">Loading…</td></tbody></tbody>
+    </table>
+    </div>
+
+    <h3 style="margin-top:22px;">Add a record</h3>
+    <div class="form-row">
+      <div class="form-group"><label for="fName">Name</label><input id="fName" placeholder="Student name"></div>
+      <div class="form-group"><label for="fRoll">Roll</label><input id="fRoll" placeholder="Roll no."></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label for="fSubject">Subject</label><input id="fSubject" placeholder="Subject"></div>
+      <div class="form-group"><label for="fMarks">Marks</label><input id="fMarks" type="number" min="0" max="100" placeholder="0–100"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="addBtn">➕ Add Row</button>
+    </div>
+  </div>
+
+  <div class="output hidden" id="insightOut"></div>
+
+  <details class="help">
+    <summary>How to connect your own Google Sheet</summary>
+    <ol>
+      <li>Create a Google Sheet with a tab named <code>Marks</code> and a header row: <code>Name | Roll | Subject | Marks</code>.</li>
+      <li>In the sheet, open <b>Extensions → Apps Script</b>.</li>
+      <li>Delete the default code and paste the script below.</li>
+      <li>Save, then <b>Deploy → New deployment → Web app</b>.</li>
+      <li>Set <b>Execute as:</b> Me and <b>Who has access:</b> Anyone, then deploy.</li>
+      <li>Copy the Web app URL, paste it in the box above and click <b>Connect</b>.</li>
+    </ol>
+    <p style="margin:12px 0 6px;"><b>Apps Script code (paste into the script editor):</b></p>
+<pre style="background:var(--surface-2);padding:14px;border-radius:10px;overflow-x:auto;font-size:.82rem;"><code>function doGet() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Marks');
+  var values = sheet.getDataRange().getValues();
+  var rows = values.slice(1).map(function(r) {
+    return { name: r[0], roll: r[1], subject: r[2], marks: r[3] };
+  });
+  return ContentService.createTextOutput(JSON.stringify(rows))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Marks');
+  var data = JSON.parse(e.postData.contents);
+  if (data.action === 'add') {
+    sheet.appendRow([data.row.name, data.row.roll, data.row.subject, data.row.marks]);
+  } else if (data.action === 'delete') {
+    var values = sheet.getDataRange().getValues();
+    for (var i = 1; i &lt; values.length; i++) {
+      if (String(values[i][1]) === String(data.roll)) {
+        sheet.deleteRow(i + 1);
+        break;
+      }
+    }
+  }
+  return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
+}</code></pre>
+  </details>
+</main>
+<script src="../assets/js/common.js"></script>
+<script src="../assets/js/local-ai.js"></script>
+<script src="../assets/js/ai.js"></script>
+<script>
+initLayout(5);
+
+const DEMO_KEY = 'aiclassroom_sheets_demo';
+const URL_KEY  = 'aiclassroom_sheets_url';
+
+const SEED = [
+  { name: 'Aarav Sharma', roll: '101', subject: 'Maths',    marks: 88 },
+  { name: 'Diya Patel',   roll: '102', subject: 'Maths',    marks: 92 },
+  { name: 'Kabir Singh',  roll: '103', subject: 'Physics',  marks: 74 },
+  { name: 'Meera Iyer',   roll: '104', subject: 'Physics',  marks: 81 },
+  { name: 'Rohan Verma',  roll: '105', subject: 'Chemistry',marks: 35 },
+  { name: 'Sneha Reddy',  roll: '106', subject: 'Chemistry',marks: 69 },
+];
+
+const modeBanner   = document.getElementById('modeBanner');
+const scriptUrl    = document.getElementById('scriptUrl');
+const connectBtn   = document.getElementById('connectBtn');
+const disconnectBtn= document.getElementById('disconnectBtn');
+const refreshBtn   = document.getElementById('refreshBtn');
+const insightBtn   = document.getElementById('insightBtn');
+const marksBody    = document.getElementById('marksBody');
+const insightOut   = document.getElementById('insightOut');
+
+let rowsCache = [];
+let liveMode = false;
+
+/* ---------- demo storage ---------- */
+function getDemoRows(){
+  try {
+    const raw = localStorage.getItem(DEMO_KEY);
+    if (raw){ const parsed = JSON.parse(raw); if (Array.isArray(parsed)) return parsed; }
+  } catch(e){ /* corrupt data — reseed */ }
+  localStorage.setItem(DEMO_KEY, JSON.stringify(SEED));
+  return SEED.slice();
+}
+function saveDemoRows(rows){ localStorage.setItem(DEMO_KEY, JSON.stringify(rows)); }
+
+/* ---------- live / demo data layer ---------- */
+function getUrl(){ return (localStorage.getItem(URL_KEY) || '').trim(); }
+
+async function fetchRows(){
+  const url = getUrl();
+  if (!url){ liveMode = false; return getDemoRows(); }
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!Array.isArray(data)) throw new Error('expected a JSON array');
+    liveMode = true;
+    return data;
+  } catch (err){
+    liveMode = false;
+    toast('Live read failed (' + (err.message || err) + ') — showing demo data');
+    return getDemoRows();
+  }
+}
+
+async function addRow(row){
+  const url = getUrl();
+  if (url){
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add', row })
+      });
+      return;
+    } catch (err){
+      toast('Live add failed (' + (err.message || err) + ') — added to demo data instead');
+    }
+  }
+  const rows = getDemoRows(); rows.push(row); saveDemoRows(rows);
+}
+
+async function deleteRow(roll){
+  const url = getUrl();
+  if (url){
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', roll })
+      });
+      return;
+    } catch (err){
+      toast('Live delete failed (' + (err.message || err) + ') — removed from demo data instead');
+    }
+  }
+  saveDemoRows(getDemoRows().filter(r => String(r.roll) !== String(roll)));
+}
+
+/* ---------- rendering ---------- */
+function renderBanner(){
+  if (liveMode){
+    modeBanner.innerHTML = '🟢 <b>Live mode</b> — connected to your Google Sheet via Apps Script.';
+    disconnectBtn.classList.remove('hidden');
+  } else {
+    modeBanner.innerHTML = '🟡 <b>Demo mode</b> — records are stored in your browser (localStorage). Connect a sheet URL above to go live.';
+    disconnectBtn.classList.add('hidden');
+  }
+}
+
+function renderTable(){
+  if (!rowsCache.length){
+    marksBody.innerHTML = '<tr><td colspan="5">No records yet — add one below.</td></tr>';
+    return;
+  }
+  marksBody.innerHTML = rowsCache.map(r =>
+    '<tr><td>' + escapeHtml(r.name) + '</td><td>' + escapeHtml(r.roll) + '</td>' +
+    '<td>' + escapeHtml(r.subject) + '</td><td>' + escapeHtml(r.marks) + '</td>' +
+    '<td><button class="btn btn-small" data-del="' + escapeHtml(r.roll) + '">Delete</button></td></tr>'
+  ).join('');
+  marksBody.querySelectorAll('[data-del]').forEach(btn => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try { await deleteRow(btn.dataset.del); await refresh(); }
+      catch (err){ toast('Delete failed: ' + (err.message || err)); }
+    };
+  });
+}
+
+async function refresh(){
+  refreshBtn.disabled = true;
+  try {
+    rowsCache = await fetchRows();
+    renderBanner();
+    renderTable();
+  } catch (err){
+    toast('Refresh failed: ' + (err.message || err));
+  } finally {
+    refreshBtn.disabled = false;
+  }
+}
+
+/* ---------- events ---------- */
+connectBtn.onclick = async () => {
+  const url = scriptUrl.value.trim();
+  if (!url){ toast('Paste your Apps Script web app URL first'); return; }
+  if (!/^https?:\/\//i.test(url)){ toast('That does not look like a valid URL'); return; }
+  connectBtn.disabled = true; connectBtn.textContent = 'Connecting…';
+  try {
+    localStorage.setItem(URL_KEY, url);
+    await refresh();
+    if (liveMode) toast('Connected — live data from your sheet');
+  } finally {
+    connectBtn.disabled = false; connectBtn.textContent = '🔗 Connect';
+  }
+};
+
+disconnectBtn.onclick = async () => {
+  localStorage.removeItem(URL_KEY);
+  scriptUrl.value = '';
+  await refresh();
+  toast('Disconnected — back to demo mode');
+};
+
+refreshBtn.onclick = refresh;
+
+document.getElementById('addBtn').onclick = async function(){
+  const row = {
+    name: document.getElementById('fName').value.trim(),
+    roll: document.getElementById('fRoll').value.trim(),
+    subject: document.getElementById('fSubject').value.trim(),
+    marks: document.getElementById('fMarks').value.trim(),
+  };
+  if (!row.name || !row.roll){ toast('Name and roll number are required'); return; }
+  this.disabled = true;
+  try {
+    await addRow(row);
+    document.getElementById('fName').value = '';
+    document.getElementById('fRoll').value = '';
+    document.getElementById('fSubject').value = '';
+    document.getElementById('fMarks').value = '';
+    await refresh();
+    toast('Row added');
+  } catch (err){
+    toast('Add failed: ' + (err.message || err));
+  } finally {
+    this.disabled = false;
+  }
+};
+
+insightBtn.onclick = async function(){
+  insightBtn.disabled = true; insightBtn.textContent = 'Analysing…';
+  insightOut.classList.remove('hidden');
+  insightOut.innerHTML = '<p><i>Analysing the data…</i></p>';
+  try {
+    const md = await generateAI('insight', { rows: rowsCache });
+    insightOut.innerHTML = miniMd(md);
+    insightOut.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (err){
+    insightOut.innerHTML = '<p>Could not generate insight.</p>';
+    toast('AI Insight failed: ' + (err.message || err));
+  } finally {
+    insightBtn.disabled = false; insightBtn.textContent = '🤖 AI Insight';
+  }
+};
+
+/* ---------- init ---------- */
+scriptUrl.value = getUrl();
+refresh();
+</script>
+</body>
+</html>

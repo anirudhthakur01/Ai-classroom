@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Presentation Generator · AI Classroom</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main class="container">
+  <div class="page-head"><span class="task-badge">Task 3</span><h1>AI Presentation Generator</h1><p class="lede">Type any topic, pick a slide count, and get a ready-to-present slide deck. Flip through it, then print it to PDF.</p><div class="mode-note"></div></div>
+
+  <div class="panel no-print">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="topic">Presentation topic</label>
+        <input type="text" id="topic" placeholder="e.g. The Water Cycle">
+      </div>
+      <div class="form-group">
+        <label for="count">Number of slides</label>
+        <select id="count">
+          <option value="4">4 slides</option>
+          <option value="5">5 slides</option>
+          <option value="6" selected>6 slides</option>
+          <option value="7">7 slides</option>
+          <option value="8">8 slides</option>
+        </select>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="genBtn">✨ Generate Slides</button>
+      <button class="btn btn-ghost" id="sampleBtn">Try a sample topic</button>
+    </div>
+  </div>
+
+  <div class="deck">
+    <div class="slide-viewport" id="slideView" aria-live="polite"></div>
+    <div class="deck-nav no-print">
+      <button class="btn btn-small" id="prevBtn">← Prev</button>
+      <button class="btn btn-small" id="printBtn">🖨️ Print / Save PDF</button>
+      <button class="btn btn-small" id="nextBtn">Next →</button>
+    </div>
+    <p class="no-print" style="text-align:center;color:var(--muted);font-size:.85rem">Tip: use ← → arrow keys to move between slides.</p>
+  </div>
+
+  <details class="help no-print">
+    <summary>How to use this task</summary>
+    <ol>
+      <li>Enter a topic and choose how many slides you want.</li>
+      <li>Click <b>✨ Generate Slides</b> to build the deck.</li>
+      <li>Use Prev/Next (or arrow keys) to rehearse, then <b>🖨️ Print / Save PDF</b>.</li>
+      <li>Connect an OpenAI key (🔑 AI Key) for topic-specific, real AI slides.</li>
+    </ol>
+  </details>
+</main>
+<script src="../assets/js/common.js"></script>
+<script src="../assets/js/local-ai.js"></script>
+<script src="../assets/js/ai.js"></script>
+<script>
+initLayout(3);
+
+const $ = id => document.getElementById(id);
+let slides = [];
+let idx = 0;
+
+function renderSlide(){
+  const view = $('slideView');
+  if (!slides.length){
+    view.innerHTML = `
+      <h2>🎤 Your presentation will appear here</h2>
+      <ul><li>Enter a topic above to generate your presentation</li></ul>`;
+    return;
+  }
+  idx = Math.max(0, Math.min(idx, slides.length - 1));
+  const s = slides[idx];
+  const title = escapeHtml(s.title || ('Slide ' + (idx + 1)));
+  const bullets = (s.bullets || []).map(b => `<li>${escapeHtml(b)}</li>`).join('');
+  view.innerHTML = `
+    <h2>${title}</h2>
+    <ul>${bullets}</ul>
+    <div class="slide-num">Slide ${idx + 1} / ${slides.length}</div>`;
+}
+
+function setLoading(loading){
+  const b = $('genBtn');
+  b.disabled = loading;
+  b.textContent = loading ? 'Generating…' : '✨ Generate Slides';
+}
+
+$('sampleBtn').onclick = () => {
+  $('topic').value = 'The Water Cycle';
+  toast('Sample topic set');
+};
+
+$('genBtn').onclick = async () => {
+  const topic = $('topic').value.trim();
+  if (!topic){ toast('Please enter a topic first'); return; }
+  const count = parseInt($('count').value, 10) || 6;
+  setLoading(true);
+  try {
+    const res = await generateAI('presentation', { topic, count });
+    if (!res || !Array.isArray(res.slides) || !res.slides.length){
+      toast('No slides were generated — please try again');
+      return;
+    }
+    slides = res.slides;
+    idx = 0;
+    renderSlide();
+    toast(slides.length + ' slides ready');
+  } catch (err){
+    toast('Could not generate slides: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+$('prevBtn').onclick = () => {
+  if (!slides.length){ toast('Generate slides first'); return; }
+  idx = (idx - 1 + slides.length) % slides.length;
+  renderSlide();
+};
+$('nextBtn').onclick = () => {
+  if (!slides.length){ toast('Generate slides first'); return; }
+  idx = (idx + 1) % slides.length;
+  renderSlide();
+};
+$('printBtn').onclick = () => {
+  if (!slides.length){ toast('Generate slides first'); return; }
+  window.print();
+};
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  if (!slides.length) return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  idx = e.key === 'ArrowLeft' ? (idx - 1 + slides.length) % slides.length : (idx + 1) % slides.length;
+  renderSlide();
+});
+
+renderSlide();
+</script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Mind Map Generator · AI Classroom</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main class="container">
+  <div class="page-head"><span class="task-badge">Task 4</span><h1>AI Mind Map Generator</h1><p class="lede">Paste a syllabus or topic outline and get an interactive mind map. Click any node to get a simple explanation of that concept.</p><div class="mode-note"></div></div>
+
+  <div class="panel">
+    <div class="form-group">
+      <label for="syllabusInput">Syllabus / topic outline</label>
+      <textarea id="syllabusInput" rows="9" placeholder="Paste your syllabus here — use new lines, # headings, or indented lists to show structure."></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="genBtn">✨ Generate Mind Map</button>
+      <button class="btn" id="sampleBtn">Load sample syllabus</button>
+    </div>
+  </div>
+
+  <p class="hidden" id="hintLine" style="color:var(--muted);font-size:.9rem;margin:14px 2px 0;">Tip: drag to pan, scroll to zoom, click any node for an explanation.</p>
+  <div class="mindmap-wrap hidden" id="mmWrap"></div>
+
+  <div class="panel mm-detail hidden" id="mmDetail"></div>
+
+  <details class="help">
+    <summary>How this works</summary>
+    <ol>
+      <li>Paste any syllabus, chapter outline or topic list — one item per line.</li>
+      <li>Use <code>#</code> headings or indentation (2 spaces per level) to show hierarchy.</li>
+      <li>Click <b>Generate Mind Map</b> — the AI converts it into a clickable tree.</li>
+      <li>Click any node to get a simple explanation of that concept.</li>
+    </ol>
+  </details>
+</main>
+<script src="../assets/js/common.js"></script>
+<script src="../assets/js/local-ai.js"></script>
+<script src="../assets/js/ai.js"></script>
+<script>
+initLayout(4);
+
+const syllabusInput = document.getElementById('syllabusInput');
+const genBtn = document.getElementById('genBtn');
+const sampleBtn = document.getElementById('sampleBtn');
+const mmWrap = document.getElementById('mmWrap');
+const mmDetail = document.getElementById('mmDetail');
+const hintLine = document.getElementById('hintLine');
+
+const SAMPLE_SYLLABUS =
+'Computer Science Fundamentals\n' +
+'  Unit 1: Programming Basics\n' +
+'    Variables and Data Types\n' +
+'    Control Flow and Loops\n' +
+'    Functions and Scope\n' +
+'  Unit 2: Data Structures\n' +
+'    Arrays and Strings\n' +
+'    Stacks and Queues\n' +
+'    Trees and Graphs\n' +
+'  Unit 3: Databases\n' +
+'    Relational Model and SQL\n' +
+'    Normalization\n' +
+'  Unit 4: Web Technologies\n' +
+'    HTML and CSS\n' +
+'    JavaScript Basics\n' +
+'    HTTP and REST APIs';
+
+sampleBtn.onclick = () => { syllabusInput.value = SAMPLE_SYLLABUS; toast('Sample syllabus loaded'); };
+
+genBtn.onclick = async () => {
+  const text = syllabusInput.value.trim();
+  if (!text){ toast('Paste a syllabus first, or load the sample'); return; }
+  genBtn.disabled = true; genBtn.textContent = 'Generating…';
+  try {
+    const tree = await generateAI('mindmap', { text });
+    if (!tree || !tree.label) throw new Error('bad mind-map data');
+    mmWrap.classList.remove('hidden');
+    hintLine.classList.remove('hidden');
+    mmDetail.classList.add('hidden');
+    renderMindMap(tree, mmWrap, onNodeClick);
+  } catch (err){
+    toast('Could not generate mind map: ' + (err.message || err));
+  } finally {
+    genBtn.disabled = false; genBtn.textContent = '✨ Generate Mind Map';
+  }
+};
+
+async function onNodeClick(label){
+  mmDetail.classList.remove('hidden');
+  mmDetail.innerHTML = '<h3>' + escapeHtml(label) + '</h3><p><i>Loading explanation…</i></p>';
+  mmDetail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  try {
+    const md = await generateAI('doubt', {
+      q: 'Explain briefly in simple terms: ' + label,
+      subject: 'general',
+      history: []
+    });
+    mmDetail.innerHTML = '<h3>' + escapeHtml(label) + '</h3><div>' + miniMd(md) + '</div>';
+  } catch (err){
+    mmDetail.innerHTML = '<h3>' + escapeHtml(label) + '</h3><p>Could not load an explanation right now.</p>';
+    toast('Explanation failed: ' + (err.message || err));
+  }
+}
+</script>
+</body>
+</html>

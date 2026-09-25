@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Notes Summarizer (OCR) · AI Classroom</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main class="container">
+  <div class="page-head">
+    <span class="task-badge">Task 10</span>
+    <h1>AI Notes Summarizer (OCR)</h1>
+    <p class="lede">Upload a photo of your handwritten or printed notes — the AI extracts the text and turns it into clean, structured study notes.</p>
+    <div class="mode-note"></div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel" style="margin-top:0">
+      <h3 style="margin-top:0">📷 Extract from image</h3>
+      <div class="form-group">
+        <label for="fileInput">Upload a photo of your notes</label>
+        <input type="file" id="fileInput" accept="image/*">
+        <p class="flash-hint" style="margin:8px 0 0">🔒 OCR runs 100% in your browser — images never leave your device.</p>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="ocrBtn">🔍 Extract Text</button>
+      </div>
+      <div class="progress hidden" id="ocrProgress"><div id="ocrBar"></div></div>
+      <div class="form-group" style="margin-top:14px">
+        <label for="extractedText">Verify / correct the text below</label>
+        <textarea id="extractedText" style="min-height:200px" placeholder="Extracted text will appear here — you can edit it before summarizing."></textarea>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:0">
+      <h3 style="margin-top:0">📝 AI Summary</h3>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="sumBtn">✨ Summarize</button>
+      </div>
+      <div class="output" id="summaryOut" style="margin-top:14px">
+        <p style="color:var(--muted)">Your study notes will appear here after summarization.</p>
+      </div>
+    </div>
+  </div>
+
+  <details class="help">
+    <summary>How this works</summary>
+    <ol>
+      <li>Upload a clear photo of your notes (good lighting, text straight on).</li>
+      <li><b>🔍 Extract Text</b> loads the OCR engine once, then reads the text from your image.</li>
+      <li>Fix any mistakes in the extracted text, then hit <b>✨ Summarize</b> for structured notes.</li>
+    </ol>
+  </details>
+</main>
+<script src="../assets/js/common.js"></script>
+<script src="../assets/js/local-ai.js"></script>
+<script src="../assets/js/ai.js"></script>
+<script>
+initLayout(10);
+
+const fileInput = document.getElementById('fileInput');
+const ocrBtn = document.getElementById('ocrBtn');
+const ocrProgress = document.getElementById('ocrProgress');
+const ocrBar = document.getElementById('ocrBar');
+const extractedText = document.getElementById('extractedText');
+const sumBtn = document.getElementById('sumBtn');
+const summaryOut = document.getElementById('summaryOut');
+
+const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+
+function loadTesseract(){
+  return new Promise((resolve, reject) => {
+    if (window.Tesseract) return resolve();
+    const s = document.createElement('script');
+    s.src = TESSERACT_CDN;
+    s.onload = () => window.Tesseract ? resolve() : reject(new Error('Tesseract.js loaded but did not initialize.'));
+    s.onerror = () => reject(new Error('Could not load the OCR engine — check your internet connection and try again.'));
+    document.head.appendChild(s);
+  });
+}
+
+ocrBtn.onclick = async () => {
+  const file = fileInput.files && fileInput.files[0];
+  if (!file){ toast('Please choose an image file first.'); return; }
+  ocrBtn.disabled = true;
+  ocrBtn.textContent = '⏳ Extracting…';
+  ocrProgress.classList.remove('hidden');
+  ocrBar.style.width = '0%';
+  try {
+    await loadTesseract();
+    const { data: { text } } = await Tesseract.recognize(file, 'eng', {
+      logger: m => {
+        if (m.status === 'recognizing text' && typeof m.progress === 'number'){
+          ocrBar.style.width = Math.round(m.progress * 100) + '%';
+        }
+      }
+    });
+    const clean = (text || '').trim();
+    if (!clean){ toast('No text detected in the image — try a clearer photo.'); }
+    else {
+      extractedText.value = clean;
+      toast('Text extracted — verify it, then summarize. ✅');
+    }
+  } catch (err) {
+    toast('OCR failed: ' + (err.message || err));
+  } finally {
+    ocrBtn.disabled = false;
+    ocrBtn.textContent = '🔍 Extract Text';
+    setTimeout(() => ocrProgress.classList.add('hidden'), 800);
+  }
+};
+
+sumBtn.onclick = async () => {
+  const text = extractedText.value.trim();
+  if (!text){ toast('No text to summarize — extract text from an image first.'); return; }
+  sumBtn.disabled = true;
+  sumBtn.textContent = '⏳ Summarizing…';
+  try {
+    const md = await generateAI('notes', { text });
+    summaryOut.innerHTML = miniMd(md);
+  } catch (err) {
+    toast('Summarization failed: ' + (err.message || err));
+  } finally {
+    sumBtn.disabled = false;
+    sumBtn.textContent = '✨ Summarize';
+  }
+};
+</script>
+</body>
+</html>

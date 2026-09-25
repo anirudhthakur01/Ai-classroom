@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Notes Generator · AI Classroom</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main class="container">
+  <div class="page-head"><span class="task-badge">Task 2</span><h1>AI Notes Generator</h1><p class="lede">Paste any chapter or topic text and get clean, exam-ready study notes: key points, a quick summary, and key terms.</p><div class="mode-note"></div></div>
+
+  <div class="panel no-print">
+    <div class="form-group">
+      <label for="sourceText">Topic / chapter text</label>
+      <textarea id="sourceText" rows="8" placeholder="Paste your chapter or topic text here (a few paragraphs work best)…"></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="genBtn">✨ Generate Notes</button>
+      <button class="btn btn-ghost" id="sampleBtn">Load sample text</button>
+      <button class="btn" id="copyBtn">📋 Copy Notes</button>
+      <button class="btn" id="dlBtn">⬇️ Download .md</button>
+    </div>
+  </div>
+
+  <div class="output" id="notesOut" aria-live="polite">
+    <p style="color:var(--muted)">Your notes will appear here once you click <b>✨ Generate Notes</b>.</p>
+  </div>
+
+  <details class="help no-print">
+    <summary>How to use this task</summary>
+    <ol>
+      <li>Paste your study text (or try <b>Load sample text</b>).</li>
+      <li>Click <b>✨ Generate Notes</b> — longer, denser text gives better notes.</li>
+      <li>Copy them, or download as a Markdown file to keep.</li>
+      <li>Connect an OpenAI key (🔑 AI Key) for even richer, real AI notes.</li>
+    </ol>
+  </details>
+</main>
+<script src="../assets/js/common.js"></script>
+<script src="../assets/js/local-ai.js"></script>
+<script src="../assets/js/ai.js"></script>
+<script>
+initLayout(2);
+
+const $ = id => document.getElementById(id);
+let lastMarkdown = '';
+
+const SAMPLE = `Photosynthesis is the process by which green plants, algae, and some bacteria convert light energy into chemical energy stored in glucose. It takes place mainly in the leaves, inside tiny structures called chloroplasts, which contain the green pigment chlorophyll that captures sunlight.
+During photosynthesis, plants absorb water from the soil through their roots and carbon dioxide from the air through small pores called stomata. Using light energy, they combine these raw materials to produce glucose, which serves as food, and release oxygen as a byproduct.
+The general equation for photosynthesis is: carbon dioxide + water → (light energy) glucose + oxygen. This process is the foundation of almost all life on Earth, because it provides the food and oxygen that most living organisms depend on.
+The rate of photosynthesis depends on several factors, including light intensity, carbon dioxide concentration, water availability, and temperature. Farmers and gardeners use this knowledge to grow healthier crops by controlling these conditions.`;
+
+$('sampleBtn').onclick = () => {
+  $('sourceText').value = SAMPLE;
+  toast('Sample text loaded');
+};
+
+function setLoading(loading){
+  const b = $('genBtn');
+  b.disabled = loading;
+  b.textContent = loading ? 'Generating…' : '✨ Generate Notes';
+}
+
+$('genBtn').onclick = async () => {
+  const text = $('sourceText').value.trim();
+  if (!text){ toast('Please paste some text first (or use "Load sample text")'); return; }
+  setLoading(true);
+  try {
+    const md = await generateAI('notes', { text });
+    lastMarkdown = md;
+    $('notesOut').innerHTML = miniMd(md);
+  } catch (err){
+    toast('Could not generate notes: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+$('copyBtn').onclick = async () => {
+  if (!lastMarkdown){ toast('Generate notes first'); return; }
+  try {
+    await navigator.clipboard.writeText(lastMarkdown);
+    toast('Notes copied to clipboard');
+  } catch (err){ toast('Copy failed: ' + err.message); }
+};
+
+$('dlBtn').onclick = () => {
+  if (!lastMarkdown){ toast('Generate notes first'); return; }
+  download('study-notes.md', lastMarkdown, 'text/markdown');
+  toast('Notes downloaded');
+};
+</script>
+</body>
+</html>

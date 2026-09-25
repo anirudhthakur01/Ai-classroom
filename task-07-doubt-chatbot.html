@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Doubt-Solving Chatbot · AI Classroom</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main class="container">
+  <div class="page-head">
+    <span class="task-badge">Task 7</span>
+    <h1>AI Doubt-Solving Chatbot</h1>
+    <p class="lede">Stuck on a concept? Ask your question and get a simple, step-by-step explanation — with conversation history so follow-up doubts stay in context.</p>
+    <div class="mode-note"></div>
+  </div>
+
+  <div class="panel">
+    <div class="form-group" style="max-width:320px">
+      <label for="subject">Subject</label>
+      <input type="text" id="subject" value="Science" placeholder="e.g. Science, Maths, History">
+    </div>
+    <div class="chat-box" id="chatBox"></div>
+    <div class="chat-input">
+      <input type="text" id="chatMsg" placeholder="Ask your doubt… (Enter to send)" autocomplete="off">
+      <button class="btn btn-primary" id="sendBtn">Send ➤</button>
+    </div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-ghost" id="clearBtn">🧹 Clear chat</button>
+    </div>
+  </div>
+
+  <details class="help">
+    <summary>How this works</summary>
+    <ol>
+      <li>Pick a subject, then type your doubt and press Enter or Send.</li>
+      <li>The last 12 messages are sent as context, so you can ask follow-up questions like "give me an example".</li>
+      <li>Connect your own key with the 🔑 button for full live-AI explanations.</li>
+    </ol>
+  </details>
+</main>
+<script src="../assets/js/common.js"></script>
+<script src="../assets/js/local-ai.js"></script>
+<script src="../assets/js/ai.js"></script>
+<script>
+initLayout(7);
+
+const chatBox = document.getElementById('chatBox');
+const chatMsg = document.getElementById('chatMsg');
+const sendBtn = document.getElementById('sendBtn');
+const subjectEl = document.getElementById('subject');
+const GREETING = "👋 Hi! I'm your AI doubt solver. Tell me which subject you're studying and ask any question — I'll explain it simply, step by step.";
+
+let history = [];   // [{role:'user'|'ai', text}]
+let waiting = false;
+
+function scrollBottom(){ chatBox.scrollTop = chatBox.scrollHeight; }
+
+function addBubble(role, html){
+  const d = document.createElement('div');
+  d.className = 'bubble ' + (role === 'user' ? 'user' : 'ai');
+  d.innerHTML = html;
+  chatBox.appendChild(d);
+  scrollBottom();
+  return d;
+}
+
+function resetChat(){
+  chatBox.innerHTML = '';
+  history = [];
+  addBubble('ai', escapeHtml(GREETING));
+}
+document.getElementById('clearBtn').onclick = resetChat;
+resetChat();
+
+async function send(){
+  const q = chatMsg.value.trim();
+  if (!q || waiting) return;
+  const subject = subjectEl.value.trim() || 'Science';
+  waiting = true;
+  sendBtn.disabled = true;
+  sendBtn.textContent = '⏳';
+
+  addBubble('user', escapeHtml(q));
+  history.push({ role: 'user', text: q.slice(0, 300) });
+  chatMsg.value = '';
+
+  const typing = addBubble('ai', '<span class="typing">Thinking…</span>');
+  try {
+    const hist = history.slice(-12).map(m => ({ role: m.role, text: String(m.text).slice(0, 300) }));
+    const answer = await generateAI('doubt', { q, subject, history: hist });
+    typing.innerHTML = miniMd(answer);
+    scrollBottom();
+    history.push({ role: 'ai', text: String(answer).slice(0, 300) });
+  } catch (err) {
+    typing.innerHTML = escapeHtml('⚠️ Sorry, something went wrong: ' + (err.message || err));
+  } finally {
+    waiting = false;
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send ➤';
+    chatMsg.focus();
+  }
+}
+
+sendBtn.onclick = send;
+chatMsg.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+</script>
+</body>
+</html>

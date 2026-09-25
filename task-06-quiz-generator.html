@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Quiz Generator · AI Classroom</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main class="container">
+  <div class="page-head"><span class="task-badge">Task 6</span><h1>AI Quiz Generator</h1><p class="lede">Enter a topic and your study notes — the AI builds a multiple-choice quiz, one question at a time, with instant feedback and a score at the end.</p><div class="mode-note"></div></div>
+
+  <div class="panel" id="formPanel">
+    <div class="form-group">
+      <label for="topicInput">Topic</label>
+      <input id="topicInput" placeholder="e.g. Photosynthesis, World War II, Python lists…">
+    </div>
+    <div class="form-group">
+      <label for="notesInput">Study notes</label>
+      <textarea id="notesInput" rows="8" placeholder="Paste your notes, chapter summary or key points here — the AI makes questions from them."></textarea>
+    </div>
+    <div class="form-group">
+      <label for="countSelect">Number of questions</label>
+      <select id="countSelect">
+        <option>3</option><option>4</option><option selected>5</option><option>6</option>
+        <option>7</option><option>8</option><option>9</option><option>10</option>
+      </select>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="genBtn">✨ Generate Quiz</button>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="quizPanel">
+    <div class="btn-row" style="justify-content:space-between;align-items:center;">
+      <span id="progressLine" style="font-weight:700;color:var(--muted);"></span>
+      <span class="score-line" id="scoreLine" style="margin:0;">Score: 0 / 0</span>
+    </div>
+    <div class="progress"><div id="progressBar"></div></div>
+    <div class="quiz-q" id="quizQ" style="margin-top:18px;"></div>
+    <div class="quiz-opts" id="quizOpts"></div>
+    <div class="btn-row" style="margin-top:18px;">
+      <button class="btn btn-primary hidden" id="nextBtn">Next →</button>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="resultPanel">
+    <h2 id="resultScore"></h2>
+    <p id="resultMsg" style="font-size:1.05rem;"></p>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="restartBtn">🔁 Restart Quiz</button>
+      <button class="btn" id="newQuizBtn">✨ New Quiz</button>
+    </div>
+  </div>
+
+  <details class="help">
+    <summary>How this works</summary>
+    <ol>
+      <li>Type a topic and paste your study notes.</li>
+      <li>Pick how many questions you want (3–10).</li>
+      <li>Answer one question at a time — you get instant green/red feedback.</li>
+      <li>At the end, see your score and restart or make a new quiz.</li>
+    </ol>
+  </details>
+</main>
+<script src="../assets/js/common.js"></script>
+<script src="../assets/js/local-ai.js"></script>
+<script src="../assets/js/ai.js"></script>
+<script>
+initLayout(6);
+
+const formPanel  = document.getElementById('formPanel');
+const quizPanel  = document.getElementById('quizPanel');
+const resultPanel= document.getElementById('resultPanel');
+const genBtn     = document.getElementById('genBtn');
+const progressLine = document.getElementById('progressLine');
+const progressBar  = document.getElementById('progressBar');
+const scoreLine  = document.getElementById('scoreLine');
+const quizQ      = document.getElementById('quizQ');
+const quizOpts   = document.getElementById('quizOpts');
+const nextBtn    = document.getElementById('nextBtn');
+
+let questions = [];
+let qi = 0;
+let score = 0;
+
+function validQuiz(data){
+  if (!data || !Array.isArray(data.questions) || !data.questions.length) return false;
+  return data.questions.every(q =>
+    q && typeof q.question === 'string' && q.question.trim().length > 0 &&
+    Array.isArray(q.options) && q.options.length === 4 &&
+    q.options.every(o => typeof o === 'string') &&
+    Number.isInteger(q.answer) && q.answer >= 0 && q.answer < 4
+  );
+}
+
+genBtn.onclick = async () => {
+  const topic = document.getElementById('topicInput').value.trim();
+  const text  = document.getElementById('notesInput').value.trim();
+  const count = parseInt(document.getElementById('countSelect').value, 10) || 5;
+  if (!topic){ toast('Enter a topic first'); return; }
+  if (text.length < 30){ toast('Paste some study notes (a few lines at least)'); return; }
+  genBtn.disabled = true; genBtn.textContent = 'Generating…';
+  try {
+    const data = await generateAI('quiz', { topic, text, count });
+    if (!validQuiz(data)) throw new Error('AI returned questions in an unexpected format');
+    questions = data.questions.slice(0, count);
+    qi = 0; score = 0;
+    formPanel.classList.add('hidden');
+    resultPanel.classList.add('hidden');
+    quizPanel.classList.remove('hidden');
+    renderQuestion();
+  } catch (err){
+    toast('Could not generate quiz: ' + (err.message || err));
+  } finally {
+    genBtn.disabled = false; genBtn.textContent = '✨ Generate Quiz';
+  }
+};
+
+function renderQuestion(){
+  const q = questions[qi];
+  progressLine.textContent = 'Question ' + (qi + 1) + ' of ' + questions.length;
+  progressBar.style.width = ((qi) / questions.length * 100) + '%';
+  scoreLine.textContent = 'Score: ' + score + ' / ' + qi;
+  quizQ.textContent = q.question;
+  quizOpts.innerHTML = '';
+  nextBtn.classList.add('hidden');
+  q.options.forEach((opt, idx) => {
+    const b = document.createElement('button');
+    b.className = 'quiz-opt';
+    b.textContent = opt;
+    b.onclick = () => answerQuestion(b, idx, q.answer);
+    quizOpts.appendChild(b);
+  });
+}
+
+function answerQuestion(btn, picked, correct){
+  const buttons = quizOpts.querySelectorAll('.quiz-opt');
+  buttons.forEach(b => b.disabled = true);
+  buttons[correct].classList.add('correct');
+  if (picked === correct){
+    score++;
+  } else {
+    btn.classList.add('wrong');
+  }
+  progressBar.style.width = ((qi + 1) / questions.length * 100) + '%';
+  scoreLine.textContent = 'Score: ' + score + ' / ' + (qi + 1);
+  nextBtn.textContent = (qi === questions.length - 1) ? 'See results →' : 'Next →';
+  nextBtn.classList.remove('hidden');
+}
+
+nextBtn.onclick = () => {
+  qi++;
+  if (qi < questions.length) renderQuestion();
+  else showResults();
+};
+
+function showResults(){
+  quizPanel.classList.add('hidden');
+  resultPanel.classList.remove('hidden');
+  const pct = Math.round(score / questions.length * 100);
+  document.getElementById('resultScore').textContent =
+    'Your score: ' + score + ' / ' + questions.length + ' (' + pct + '%)';
+  let msg;
+  if (pct >= 80)      msg = '🌟 Excellent! You have really mastered this topic.';
+  else if (pct >= 50) msg = '👍 Good job! A little more revision and you will be at the top.';
+  else                msg = '📚 Keep practicing — re-read your notes and try the quiz again.';
+  document.getElementById('resultMsg').textContent = msg;
+  resultPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+document.getElementById('restartBtn').onclick = () => {
+  qi = 0; score = 0;
+  resultPanel.classList.add('hidden');
+  quizPanel.classList.remove('hidden');
+  renderQuestion();
+};
+
+document.getElementById('newQuizBtn').onclick = () => {
+  resultPanel.classList.add('hidden');
+  quizPanel.classList.add('hidden');
+  formPanel.classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+</script>
+</body>
+</html>

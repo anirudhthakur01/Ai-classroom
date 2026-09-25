@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Study Planner · AI Classroom</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main class="container">
+  <div class="page-head">
+    <span class="task-badge">Task 9</span>
+    <h1>AI Study Planner</h1>
+    <p class="lede">Tell the AI your subjects and exam date, and get a day-by-day timetable with focused 50-minute study slots — weighted by your priorities.</p>
+    <div class="mode-note"></div>
+  </div>
+
+  <div class="panel">
+    <div class="form-group">
+      <label for="subjects">Subjects (one per line — "Subject" or "Subject:priority 1-5")</label>
+      <textarea id="subjects" placeholder="Maths:5&#10;Physics:4&#10;Chemistry:4&#10;English:2">Maths:5
+Physics:4
+Chemistry:4
+English:2</textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="hours">Study hours per day</label>
+        <input type="number" id="hours" min="1" max="12" value="4">
+      </div>
+      <div></div>
+      <div class="form-group">
+        <label for="startDate">Start date</label>
+        <input type="date" id="startDate">
+      </div>
+      <div class="form-group">
+        <label for="examDate">Exam date</label>
+        <input type="date" id="examDate">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="genBtn">✨ Generate Timetable</button>
+      <button class="btn" id="regenBtn" style="display:none">🔁 Regenerate</button>
+      <button class="btn" id="printBtn" style="display:none">🖨️ Print Timetable</button>
+    </div>
+  </div>
+
+  <div id="legend" class="btn-row" style="margin-top:16px; display:none"></div>
+  <div class="plan-grid" id="planGrid"></div>
+
+  <details class="help">
+    <summary>How this works</summary>
+    <ol>
+      <li>List your subjects, one per line. Add <code>:1</code> to <code>:5</code> to set priority — higher priority means more slots.</li>
+      <li>Set your daily study hours, start date and exam date.</li>
+      <li>The AI builds 50-minute slots from 09:00 onwards for each day up to the exam.</li>
+    </ol>
+  </details>
+</main>
+<script src="../assets/js/common.js"></script>
+<script src="../assets/js/local-ai.js"></script>
+<script src="../assets/js/ai.js"></script>
+<script>
+initLayout(9);
+
+const PALETTE = ['#4f46e5','#0891b2','#16a34a','#d97706','#db2777','#7c3aed'];
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+const subjectsEl = document.getElementById('subjects');
+const hoursEl = document.getElementById('hours');
+const startEl = document.getElementById('startDate');
+const examEl = document.getElementById('examDate');
+const genBtn = document.getElementById('genBtn');
+const regenBtn = document.getElementById('regenBtn');
+const printBtn = document.getElementById('printBtn');
+const legend = document.getElementById('legend');
+const planGrid = document.getElementById('planGrid');
+
+function fmtDateLocal(d){
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+const now = new Date();
+startEl.value = fmtDateLocal(now);
+examEl.value = fmtDateLocal(new Date(now.getTime() + 14 * 864e5));
+
+function fmtDayLabel(iso){
+  const [y, m, dd] = iso.split('-').map(Number);
+  const d = new Date(y, m - 1, dd);
+  return `${DAYS[d.getDay()]}, ${dd} ${MONTHS[m - 1]}`;
+}
+
+function colorFor(name){
+  let h = 0;
+  for (const ch of name) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+
+function parseSubjects(){
+  return subjectsEl.value.split('\n')
+    .map(l => l.trim())
+    .filter(Boolean)
+    .map(l => {
+      const m = l.match(/^(.+?)(?::\s*(\d))?\s*$/);
+      const name = m[1].trim();
+      let p = m[2] ? parseInt(m[2], 10) : 3;
+      p = Math.min(5, Math.max(1, p));
+      return { name, priority: p };
+    })
+    .filter(s => s.name);
+}
+
+async function generate(){
+  const subjects = parseSubjects();
+  if (!subjects.length){ toast('Add at least one subject.'); return; }
+  const hoursPerDay = Math.min(12, Math.max(1, parseInt(hoursEl.value, 10) || 4));
+  const startDate = startEl.value, examDate = examEl.value;
+  if (!startDate || !examDate || examDate < startDate){ toast('Check your start and exam dates.'); return; }
+
+  genBtn.disabled = true;
+  genBtn.textContent = '⏳ Generating…';
+  try {
+    const res = await generateAI('studyplan', { subjects, hoursPerDay, startDate, examDate });
+    if (res && res.error){ toast(res.error); return; }
+    if (!res || !res.days || !res.days.length){ toast('No plan was generated — try again.'); return; }
+    renderPlan(res.days, subjects);
+  } catch (err) {
+    toast('Timetable generation failed: ' + (err.message || err));
+  } finally {
+    genBtn.disabled = false;
+    genBtn.textContent = '✨ Generate Timetable';
+  }
+}
+
+function renderPlan(days, subjects){
+  // legend
+  legend.style.display = 'flex';
+  legend.innerHTML = subjects.map(s =>
+    `<span style="display:inline-flex;align-items:center;gap:6px;font-size:.88rem;font-weight:600">
+       <span class="dot" style="background:${colorFor(s.name)}"></span>${escapeHtml(s.name)} (P${s.priority})
+     </span>`).join('');
+
+  // plan grid
+  planGrid.innerHTML = days.map(d => `
+    <div class="plan-day">
+      <h4>${escapeHtml(fmtDayLabel(d.date))}</h4>
+      ${d.slots.map(s => `
+        <div class="slot">
+          <span class="t">${escapeHtml(s.time)}</span>
+          <span class="dot" style="background:${colorFor(s.subject)}"></span>
+          <span class="s">${escapeHtml(s.subject)}</span>
+        </div>`).join('')}
+    </div>`).join('');
+
+  regenBtn.style.display = '';
+  printBtn.style.display = '';
+  planGrid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+genBtn.onclick = generate;
+regenBtn.onclick = generate;
+printBtn.onclick = () => window.print();
+</script>
+</body>
+</html>

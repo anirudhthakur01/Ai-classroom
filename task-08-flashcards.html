@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Flashcard Generator · AI Classroom</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main class="container">
+  <div class="page-head">
+    <span class="task-badge">Task 8</span>
+    <h1>AI Flashcard Generator</h1>
+    <p class="lede">Paste chapter notes or any study text and get question-answer flashcards for quick revision. Click a card to flip it.</p>
+    <div class="mode-note"></div>
+  </div>
+
+  <div class="panel">
+    <div class="form-group">
+      <label for="sourceText">Chapter / topic text</label>
+      <textarea id="sourceText" placeholder="Paste your chapter notes here — definitions, facts and key terms work best…"></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn" id="sampleBtn">📄 Load sample text</button>
+      <button class="btn btn-primary" id="genBtn">✨ Generate Flashcards</button>
+    </div>
+  </div>
+
+  <div class="flash-deck" id="deckWrap" style="display:none">
+    <div class="flashcard" id="flashcard">
+      <div class="flash-inner">
+        <div class="flash-face flash-front" id="flashFront"></div>
+        <div class="flash-face flash-back" id="flashBack"></div>
+      </div>
+    </div>
+    <div id="counter" style="font-weight:700"></div>
+    <div class="btn-row" style="justify-content:center">
+      <button class="btn btn-small" id="prevBtn">← Prev</button>
+      <button class="btn btn-small" id="nextBtn">Next →</button>
+      <button class="btn btn-small" id="shuffleBtn">🔀 Shuffle</button>
+    </div>
+    <div class="flash-hint">💡 Click the card to flip it</div>
+  </div>
+
+  <details class="help">
+    <summary>How this works</summary>
+    <ol>
+      <li>Paste study text (definitions like "X is Y" work best) or load the sample.</li>
+      <li>Click <b>✨ Generate Flashcards</b> — the AI pulls out key questions and answers.</li>
+      <li>Use Prev / Next to browse, 🔀 Shuffle for random order, and click the card to flip.</li>
+    </ol>
+  </details>
+</main>
+<script src="../assets/js/common.js"></script>
+<script src="../assets/js/local-ai.js"></script>
+<script src="../assets/js/ai.js"></script>
+<script>
+initLayout(8);
+
+const SAMPLE = "Photosynthesis is the process by which green plants convert sunlight, water and carbon dioxide into glucose and oxygen. Chlorophyll is the green pigment in leaves that captures light energy for photosynthesis. Gravity is the force that pulls objects toward the centre of the Earth. Newton's first law states that an object at rest stays at rest unless acted upon by an external force. Force is calculated as mass multiplied by acceleration. Friction is the resistance that opposes motion between two surfaces in contact. Energy cannot be created or destroyed; it can only change from one form to another. Kinetic energy is the energy of a moving object, while potential energy is energy stored because of position. The cell is the basic unit of life in all living organisms. The nucleus controls all activities of the cell, and mitochondria release energy from food through respiration.";
+
+const sourceText = document.getElementById('sourceText');
+const genBtn = document.getElementById('genBtn');
+const deckWrap = document.getElementById('deckWrap');
+const flashcard = document.getElementById('flashcard');
+const flashFront = document.getElementById('flashFront');
+const flashBack = document.getElementById('flashBack');
+const counter = document.getElementById('counter');
+
+let cards = [];
+let idx = 0;
+
+document.getElementById('sampleBtn').onclick = () => { sourceText.value = SAMPLE; };
+
+function renderCard(){
+  if (!cards.length) return;
+  const c = cards[idx];
+  flashcard.classList.remove('flipped');
+  flashFront.textContent = 'Q: ' + c.q;
+  flashBack.textContent = 'A: ' + c.a;
+  counter.textContent = `Card ${idx + 1} / ${cards.length}`;
+}
+
+flashcard.onclick = () => flashcard.classList.toggle('flipped');
+
+document.getElementById('prevBtn').onclick = () => {
+  if (!cards.length) return toast('No cards yet — generate flashcards first.');
+  idx = (idx - 1 + cards.length) % cards.length;
+  renderCard();
+};
+document.getElementById('nextBtn').onclick = () => {
+  if (!cards.length) return toast('No cards yet — generate flashcards first.');
+  idx = (idx + 1) % cards.length;
+  renderCard();
+};
+document.getElementById('shuffleBtn').onclick = () => {
+  if (!cards.length) return toast('No cards yet — generate flashcards first.');
+  cards = shuffle(cards);
+  idx = 0;
+  renderCard();
+  toast('Deck shuffled 🔀');
+};
+
+genBtn.onclick = async () => {
+  const text = sourceText.value.trim();
+  if (!text){ toast('Please paste some study text first.'); return; }
+  genBtn.disabled = true;
+  genBtn.textContent = '⏳ Generating…';
+  try {
+    const res = await generateAI('flashcards', { text });
+    cards = (res && res.cards) ? res.cards : [];
+    if (!cards.length){ toast('No flashcards could be generated — try text with definitions.'); return; }
+    idx = 0;
+    deckWrap.style.display = 'flex';
+    renderCard();
+    deckWrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (err) {
+    toast('Flashcard generation failed: ' + (err.message || err));
+  } finally {
+    genBtn.disabled = false;
+    genBtn.textContent = '✨ Generate Flashcards';
+  }
+};
+</script>
+</body>
+</html>
